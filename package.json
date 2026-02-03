@@ -1,0 +1,32 @@
+{
+  "name": "forge-trust-chain",
+  "version": "0.2.0",
+  "description": "FORGE - Trust Chain Protocol: The trust layer for cloud operations and AI agents",
+  "type": "module",
+  "main": "src/cli/index.js",
+  "bin": {
+    "forge": "src/cli/index.js"
+  },
+  "scripts": {
+    "forge": "node src/cli/index.js",
+    "mcp": "node src/mcp/server.js",
+    "demo": "node src/cli/index.js demo",
+    "scan": "node src/cli/index.js scan",
+    "anchor": "node src/cli/index.js anchor",
+    "test": "node src/test.js"
+  },
+  "keywords": [
+    "trust",
+    "security",
+    "blockchain",
+    "ai-agent",
+    "zero-trust",
+    "mcp",
+    "opentimestamps"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.25.3",
+    "zod": "^4.3.6"
+  }
+}

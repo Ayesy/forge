@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "forge": {
+      "command": "node",
+      "args": ["/path/to/forge/src/mcp/server.js"],
+      "env": {
+        "FORGE_STORE": "~/.forge/chain.json"
+      }
+    }
+  }
+}
