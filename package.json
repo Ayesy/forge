@@ -1,7 +1,7 @@
 {
   "name": "forge-trust-chain",
-  "version": "0.2.0",
-  "description": "FORGE - Trust Chain Protocol: The trust layer for cloud operations and AI agents",
+  "version": "0.3.0",
+  "description": "FORGE - Trust Chain Protocol: Verifiable, undeniable, Bitcoin-anchored audit trail for cloud operations and AI agents",
   "type": "module",
   "main": "src/cli/index.js",
   "bin": {
@@ -19,12 +19,35 @@
     "trust",
     "security",
     "blockchain",
+    "bitcoin",
+    "audit",
+    "compliance",
+    "devops",
     "ai-agent",
     "zero-trust",
     "mcp",
-    "opentimestamps"
+    "opentimestamps",
+    "merkle",
+    "hash-chain"
   ],
+  "author": "Ayesy",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Ayesy/forge.git"
+  },
+  "homepage": "https://github.com/Ayesy/forge#readme",
+  "bugs": {
+    "url": "https://github.com/Ayesy/forge/issues"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "src/",
+    "README.md",
+    "LICENSE"
+  ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.3",
     "zod": "^4.3.6"
