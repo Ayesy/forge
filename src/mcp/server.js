@@ -74,6 +74,10 @@ function recordAtom(action, fromState, toState) {
     prev,
   });
   const index = store.appendAtom(atom);
+
+  // Save plaintext action to local index (never exported)
+  store.saveAction(atom.action, action, { who: getIdentity(), source: "mcp" });
+
   return { atom, index };
 }
 
@@ -355,11 +359,48 @@ server.tool(
   }
 );
 
+/* ---- forge_history ---- */
+
+server.tool(
+  "forge_history",
+  "Show recent operations with plaintext action descriptions. This data is LOCAL ONLY and never exported or shared. Use this to understand what operations were recorded.",
+  {
+    limit: z.number().int().min(1).max(100).optional().describe("Number of recent entries to show (default 20)"),
+  },
+  async ({ limit }) => {
+    const history = store.getHistory(limit || 20);
+
+    if (history.length === 0) {
+      return {
+        content: [{ type: "text", text: "No history. Use forge_log to record operations first." }],
+      };
+    }
+
+    const lines = [
+      "── FORGE History (local plaintext) ──",
+      "⚠️  This data is LOCAL ONLY. Never share actions.json.",
+      "",
+    ];
+
+    for (const entry of history) {
+      const time = new Date(entry.when).toISOString().slice(0, 19);
+      lines.push(`#${entry.index} [${time}]`);
+      lines.push(`   ${entry.action_text}`);
+      lines.push(`   proof: ${entry.proof.slice(0, 24)}…`);
+      lines.push("");
+    }
+
+    return {
+      content: [{ type: "text", text: lines.join("\n") }],
+    };
+  }
+);
+
 /* ---- forge_export ---- */
 
 server.tool(
   "forge_export",
-  "Export the entire trust chain as JSON. This can be shared with a counterparty for cross-chain verification, or archived for dispute resolution.",
+  "Export the entire trust chain as JSON (NO plaintext actions). This can be shared with a counterparty for cross-chain verification, or archived for dispute resolution. Plaintext actions are stored locally in actions.json and never exported.",
   {},
   async () => {
     const data = store.exportAll();

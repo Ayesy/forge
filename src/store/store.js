@@ -18,11 +18,19 @@ const DEFAULT_PATH = join(
   "chain.json"
 );
 
+const DEFAULT_ACTIONS_PATH = join(
+  process.env.HOME || "/tmp",
+  ".forge",
+  "actions.json"
+);
+
 export class Store {
-  constructor(path = DEFAULT_PATH) {
+  constructor(path = DEFAULT_PATH, actionsPath = DEFAULT_ACTIONS_PATH) {
     this.path = path;
+    this.actionsPath = actionsPath;
     this._ensure();
     this._data = this._load();
+    this._actions = this._loadActions();
   }
 
   /* ---- Atoms ---- */
@@ -90,6 +98,71 @@ export class Store {
   lastProof() {
     if (this._data.atoms.length === 0) return "genesis";
     return this._data.atoms[this._data.atoms.length - 1].proof;
+  }
+
+  /* ---- Actions (local plaintext index, never exported) ---- */
+
+  saveAction(hash, plaintext, metadata = {}) {
+    this._actions.entries[hash] = {
+      plaintext,
+      recorded_at: Date.now(),
+      ...metadata,
+    };
+    this._saveActions();
+  }
+
+  getAction(hash) {
+    return this._actions.entries[hash] || null;
+  }
+
+  getActionByIndex(atomIndex) {
+    const atom = this.getAtom(atomIndex);
+    if (!atom) return null;
+    return this.getAction(atom.action);
+  }
+
+  getAllActions() {
+    return this._actions.entries;
+  }
+
+  // Get history with plaintext (for display)
+  getHistory(limit = 20) {
+    const atoms = this.getAtoms();
+    const recent = atoms.slice(-limit);
+    return recent.map((atom, i) => {
+      const action = this.getAction(atom.action);
+      return {
+        index: atoms.length - recent.length + i,
+        when: atom.when,
+        proof: atom.proof,
+        action_hash: atom.action,
+        action_text: action?.plaintext || "[unknown - recorded before plaintext storage]",
+      };
+    });
+  }
+
+  _loadActions() {
+    if (existsSync(this.actionsPath)) {
+      try {
+        return JSON.parse(readFileSync(this.actionsPath, "utf8"));
+      } catch {
+        return this._emptyActions();
+      }
+    }
+    return this._emptyActions();
+  }
+
+  _saveActions() {
+    writeFileSync(this.actionsPath, JSON.stringify(this._actions, null, 2));
+  }
+
+  _emptyActions() {
+    return {
+      version: "0.1.0",
+      note: "LOCAL ONLY - This file contains plaintext actions for your reference. Never share or export this file.",
+      created_at: Date.now(),
+      entries: {},
+    };
   }
 
   /* ---- Internal ---- */

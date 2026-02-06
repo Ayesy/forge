@@ -88,6 +88,9 @@ function cmdLog(action) {
 
   const index = store.appendAtom(atom);
 
+  // Save plaintext action to local index (never exported)
+  store.saveAction(atom.action, action, { who: identity });
+
   console.log("");
   console.log("  ✓ TrustAtom recorded");
   console.log(`  Index:  #${index}`);
@@ -307,6 +310,29 @@ function cmdWitness(subArgs) {
   }
 }
 
+function cmdHistory(limit = 20) {
+  const store = new Store();
+  const history = store.getHistory(parseInt(limit) || 20);
+
+  if (history.length === 0) {
+    console.log("\n  No history. Run 'forge log' first.\n");
+    return;
+  }
+
+  console.log("");
+  console.log("  ── FORGE History (local plaintext) ──");
+  console.log("  ⚠️  This data is LOCAL ONLY. Never share actions.json.");
+  console.log("");
+
+  for (const entry of history) {
+    const time = new Date(entry.when).toISOString().slice(0, 19);
+    console.log(`  #${entry.index} [${time}]`);
+    console.log(`     ${entry.action_text}`);
+    console.log(`     proof: ${entry.proof.slice(0, 24)}…`);
+    console.log("");
+  }
+}
+
 function cmdDemo() {
   console.log("");
   console.log("╔══════════════════════════════════════════════════════╗");
@@ -507,6 +533,15 @@ switch (command) {
     cmdDemo();
     break;
 
+  case "history":
+    cmdHistory(args[1]);
+    break;
+
+  case "mcp":
+    // Start MCP server
+    import("../mcp/server.js");
+    break;
+
   case "help":
   default:
     console.log(`
@@ -525,8 +560,10 @@ switch (command) {
     forge witness                    Show witness status for latest block
     forge witness --bilateral <id>   Create bilateral witness receipt
     forge status                     Show chain status
-    forge export                     Export chain as JSON
+    forge history [n]                Show recent operations with plaintext (local only)
+    forge export                     Export chain as JSON (no plaintext)
     forge demo                       Run full demonstration
+    forge mcp                        Start MCP server (for Claude Code)
 
   Witness Hierarchy:
     Level 1: Self        — Only you hold the hash (can be deleted)
