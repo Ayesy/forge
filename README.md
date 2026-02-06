@@ -1,8 +1,10 @@
-# FORGE — Trust Chain Protocol v0.3
+# FORGE — Trust Chain Protocol v0.4
 
 > **Trust = Certainty × Existence**
 
 The trust layer for cloud operations and AI agents. Every operation produces a verifiable, undeniable, cryptographically chained fact anchored to the Bitcoin blockchain.
+
+**Now with Rust core!** High-performance native implementation available at [forge-rust](https://github.com/Ayesy/forge-rust).
 
 ---
 
@@ -338,8 +340,50 @@ node src/test.js
 
 ---
 
+## Rust Implementation
+
+A high-performance Rust implementation is available: [forge-rust](https://github.com/Ayesy/forge-rust)
+
+### Why Rust?
+
+| Aspect | JavaScript | Rust |
+|--------|------------|------|
+| **Speed** | Interpreted | Native binary |
+| **Memory** | GC managed | Zero-cost abstractions |
+| **Safety** | Runtime errors | Compile-time guarantees |
+| **Deployment** | Requires Node.js | Single binary |
+
+### Implementation Status
+
+| Module | JS | Rust | Status |
+|--------|:--:|:----:|--------|
+| TrustPixel (hash + witness) | ✅ | ✅ | Cross-validated |
+| TrustAtom (state transitions) | ✅ | ✅ | Cross-validated |
+| Merkle Tree | ✅ | 🚧 | In progress |
+| Chain Manager | ✅ | 🚧 | In progress |
+| Store (persistence) | ✅ | ⏳ | Planned |
+| Witness (OTS) | ✅ | ⏳ | Planned |
+| CLI | ✅ | ⏳ | Planned |
+| Scanner | ✅ | ⏳ | Planned |
+
+### Cross-Validation
+
+Rust and JavaScript produce identical outputs:
+
+```
+hash("hello") → 2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824
+```
+
+Both implementations pass 20+ cross-validation tests.
+
+---
+
 ## Roadmap
 
+- [x] Rust core implementation (Phase 1)
+- [ ] Rust Merkle tree and chain (Phase 2)
+- [ ] Rust persistence and OTS (Phase 3)
+- [ ] Rust CLI (Phase 4)
 - [ ] Web dashboard for chain visualization
 - [ ] Team/organization support
 - [ ] Webhook notifications
