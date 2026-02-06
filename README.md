@@ -4,7 +4,7 @@
 
 The trust layer for cloud operations and AI agents. Every operation produces a verifiable, undeniable, cryptographically chained fact anchored to the Bitcoin blockchain.
 
-**Now with Rust core!** High-performance native implementation available at [forge-rust](https://github.com/Ayesy/forge-rust).
+**Rust core in development!** High-performance native implementation coming soon.
 
 ---
 
@@ -342,7 +342,7 @@ node src/test.js
 
 ## Rust Implementation
 
-A high-performance Rust implementation is available: [forge-rust](https://github.com/Ayesy/forge-rust)
+A high-performance Rust implementation is in development (private repository).
 
 ### Why Rust?
 
