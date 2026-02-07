@@ -28,7 +28,8 @@ import { execSync } from "node:child_process";
 import { hostname, userInfo } from "node:os";
 
 import { hash } from "../core/trust-pixel.js";
-import { createAtom, verifyAtom, formatAtom } from "../core/trust-atom.js";
+import { createAtom, createSignedAtom, verifyAtom, verifyAtomSignature, formatAtom } from "../core/trust-atom.js";
+import { loadKeys, hasKeys } from "../core/keys.js";
 import { TrustChain, findDivergence } from "../core/chain.js";
 import { Store } from "../store/store.js";
 import { scan, formatScanResults } from "../scanner/index.js";
@@ -63,22 +64,45 @@ function stateSnapshot() {
 /**
  * Core function: record a TrustAtom.
  * Called by every tool to create automatic audit trail.
+ * Uses signed atoms if keys are available.
  */
 function recordAtom(action, fromState, toState) {
   const prev = store.lastProof();
-  const atom = createAtom({
-    who: getIdentity(),
-    from: fromState || stateSnapshot(),
-    action,
-    to: toState || stateSnapshot(),
-    prev,
-  });
+  const identity = getIdentity();
+  const keys = loadKeys();
+
+  let atom;
+  if (keys) {
+    // Create signed atom
+    atom = createSignedAtom({
+      who: identity,
+      from: fromState || stateSnapshot(),
+      action,
+      to: toState || stateSnapshot(),
+      prev,
+    });
+  } else {
+    // Create unsigned atom
+    atom = createAtom({
+      who: identity,
+      from: fromState || stateSnapshot(),
+      action,
+      to: toState || stateSnapshot(),
+      prev,
+    });
+  }
+
   const index = store.appendAtom(atom);
 
   // Save plaintext action to local index (never exported)
-  store.saveAction(atom.action, action, { who: getIdentity(), source: "mcp" });
+  store.saveAction(atom.action, action, {
+    who: identity,
+    source: "mcp",
+    signed: !!keys,
+    signer: atom.signer || null,
+  });
 
-  return { atom, index };
+  return { atom, index, signed: !!keys };
 }
 
 /* ================================================================
@@ -124,22 +148,31 @@ server.tool(
   async ({ action, from_state, to_state }) => {
     const fromState = from_state ? { description: from_state, ...stateSnapshot() } : stateSnapshot();
     const toState = to_state ? { description: to_state, ...stateSnapshot() } : stateSnapshot();
-    
-    const { atom, index } = recordAtom(action, fromState, toState);
+
+    const { atom, index, signed } = recordAtom(action, fromState, toState);
+
+    const lines = [
+      "✓ TrustAtom recorded",
+      `  Index:  #${index}`,
+      `  Action: ${action}`,
+      `  Proof:  ${atom.proof}`,
+      `  Chain:  ${store.atomCount} atoms total`,
+      `  Prev:   ${atom.prev[0] === "genesis" ? "genesis" : atom.prev[0].slice(0, 32) + "…"}`,
+    ];
+
+    if (signed) {
+      lines.push(`  Signed: ✓ ${atom.signer}`);
+    } else {
+      lines.push(`  Signed: ✗ (run 'forge init' to enable)`);
+    }
+
+    lines.push("");
+    lines.push("  Witness: self (local). Use forge_seal to create Merkle block for anchoring.");
 
     return {
       content: [{
         type: "text",
-        text: [
-          "✓ TrustAtom recorded",
-          `  Index:  #${index}`,
-          `  Action: ${action}`,
-          `  Proof:  ${atom.proof}`,
-          `  Chain:  ${store.atomCount} atoms total`,
-          `  Prev:   ${atom.prev[0] === "genesis" ? "genesis" : atom.prev[0].slice(0, 32) + "…"}`,
-          "",
-          "  Witness: self (local). Use forge_seal to create Merkle block for anchoring.",
-        ].join("\n"),
+        text: lines.join("\n"),
       }],
     };
   }

@@ -18,7 +18,8 @@ import { scan, formatScanResults } from "../scanner/index.js";
 import { TrustChain, findDivergence } from "../core/chain.js";
 import { Store } from "../store/store.js";
 import { hash } from "../core/trust-pixel.js";
-import { verifyAtom, formatAtom, createAtom } from "../core/trust-atom.js";
+import { verifyAtom, formatAtom, createAtom, createSignedAtom, verifyAtomSignature, verifyChain } from "../core/trust-atom.js";
+import { initializeKeys, loadKeys, hasKeys, exportIdentity, importTrustedKey, listTrustedKeys, getFingerprint } from "../core/keys.js";
 import { execSync } from "node:child_process";
 import { hostname, userInfo } from "node:os";
 import { submitToOTS, checkOTSUpgrade, witnessSummary, createBilateralWitness, witnessLevel } from "../core/witness.js";
@@ -59,6 +60,134 @@ function getIdentity() {
    COMMANDS
    ================================================================ */
 
+function cmdInit(name) {
+  console.log("");
+  console.log("  ── FORGE Identity Initialization ──");
+  console.log("");
+
+  if (hasKeys()) {
+    const keys = loadKeys();
+    console.log("  ⚠️  Keys already exist!");
+    console.log(`  Fingerprint: ${keys.fingerprint}`);
+    console.log("");
+    console.log("  To regenerate (WARNING: invalidates all your signed atoms):");
+    console.log("    rm -rf ~/.forge/keys && forge init");
+    console.log("");
+    return;
+  }
+
+  const identity = {
+    name: name || getIdentity(),
+    created_by: "forge-cli",
+  };
+
+  try {
+    const result = initializeKeys(identity);
+
+    console.log("  ✓ Ed25519 key pair generated");
+    console.log("");
+    console.log(`  Fingerprint: ${result.fingerprint}`);
+    console.log(`  Identity:    ${identity.name}`);
+    console.log("");
+    console.log("  Files created:");
+    console.log("    ~/.forge/keys/private.key  (NEVER share this!)");
+    console.log("    ~/.forge/keys/public.key   (share for verification)");
+    console.log("");
+    console.log("  From now on, all atoms will be signed with your private key.");
+    console.log("  Others can verify your atoms using your public key.");
+    console.log("");
+    console.log("  Share your identity:");
+    console.log("    forge identity --export > my-identity.json");
+    console.log("");
+  } catch (err) {
+    console.error(`  ✗ Error: ${err.message}`);
+    process.exit(1);
+  }
+}
+
+function cmdIdentity(subArgs) {
+  if (subArgs.includes("--export")) {
+    const identity = exportIdentity();
+    if (!identity) {
+      console.error("  No identity found. Run 'forge init' first.");
+      process.exit(1);
+    }
+    console.log(JSON.stringify(identity, null, 2));
+    return;
+  }
+
+  if (subArgs.includes("--import")) {
+    const filePath = subArgs[subArgs.indexOf("--import") + 1];
+    if (!filePath) {
+      console.error("  Usage: forge identity --import <file.json> [--alias <name>]");
+      process.exit(1);
+    }
+
+    try {
+      const { readFileSync } = require("node:fs");
+      const data = JSON.parse(readFileSync(filePath, "utf8"));
+      const alias = subArgs.includes("--alias")
+        ? subArgs[subArgs.indexOf("--alias") + 1]
+        : data.identity?.name || null;
+
+      const result = importTrustedKey(data.public_key, alias);
+      console.log("");
+      console.log("  ✓ Trusted identity imported");
+      console.log(`  Fingerprint: ${result.fingerprint}`);
+      console.log(`  Alias:       ${result.alias || "(none)"}`);
+      console.log("");
+    } catch (err) {
+      console.error(`  ✗ Error: ${err.message}`);
+      process.exit(1);
+    }
+    return;
+  }
+
+  if (subArgs.includes("--list")) {
+    const trusted = listTrustedKeys();
+    console.log("");
+    console.log("  ── Trusted Identities ──");
+    console.log("");
+
+    if (trusted.length === 0) {
+      console.log("  No trusted identities. Import with:");
+      console.log("    forge identity --import <file.json>");
+    } else {
+      for (const t of trusted) {
+        console.log(`  ${t.fingerprint}`);
+        if (t.alias) console.log(`    Alias: ${t.alias}`);
+        console.log(`    Imported: ${new Date(t.imported_at).toISOString()}`);
+        console.log("");
+      }
+    }
+    return;
+  }
+
+  // Show current identity
+  if (!hasKeys()) {
+    console.log("");
+    console.log("  No identity found. Create one with:");
+    console.log("    forge init");
+    console.log("");
+    return;
+  }
+
+  const keys = loadKeys();
+  console.log("");
+  console.log("  ── Your FORGE Identity ──");
+  console.log("");
+  console.log(`  Fingerprint: ${keys.fingerprint}`);
+  console.log(`  Name:        ${keys.identity?.name || "(not set)"}`);
+  console.log(`  Created:     ${new Date(keys.identity?.created_at).toISOString()}`);
+  console.log(`  Algorithm:   Ed25519`);
+  console.log("");
+  console.log("  Commands:");
+  console.log("    forge identity --export    Export public key for sharing");
+  console.log("    forge identity --import    Import trusted identity");
+  console.log("    forge identity --list      List trusted identities");
+  console.log("");
+}
+
 function cmdScan() {
   const results = scan();
   console.log(formatScanResults(results));
@@ -78,13 +207,31 @@ function cmdLog(action) {
 
   const prev = store.lastProof();
 
-  const atom = createAtom({
-    who: identity,
-    from: stateBefore,
-    action,
-    to: stateSnapshot(),
-    prev,
-  });
+  // Check if we have signing keys
+  const keys = loadKeys();
+  let atom;
+  let signed = false;
+
+  if (keys) {
+    // Create signed atom
+    atom = createSignedAtom({
+      who: identity,
+      from: stateBefore,
+      action,
+      to: stateSnapshot(),
+      prev,
+    });
+    signed = true;
+  } else {
+    // Create unsigned atom (backwards compatibility)
+    atom = createAtom({
+      who: identity,
+      from: stateBefore,
+      action,
+      to: stateSnapshot(),
+      prev,
+    });
+  }
 
   const index = store.appendAtom(atom);
 
@@ -99,6 +246,13 @@ function cmdLog(action) {
   console.log(`  Proof:  ${atom.proof.slice(0, 32)}…`);
   console.log(`  Chain:  ${store.atomCount} atoms total`);
   console.log(`  Prev:   ${prev === "genesis" ? "genesis" : prev.slice(0, 16) + "…"}`);
+
+  if (signed) {
+    console.log(`  Signed: ✓ ${keys.fingerprint}`);
+  } else {
+    console.log(`  Signed: ✗ (run 'forge init' to enable signing)`);
+  }
+
   console.log("");
   console.log("  Witness: self (local only)");
   console.log("  → Run 'forge seal' to create Merkle block");
@@ -118,25 +272,40 @@ function cmdVerify() {
   console.log("  Verifying chain integrity…");
   console.log(`  Atoms: ${atoms.length}`);
 
-  // Verify each atom
-  let broken = -1;
-  for (let i = 0; i < atoms.length; i++) {
-    if (!verifyAtom(atoms[i])) {
-      broken = i;
-      break;
-    }
-    if (i > 0 && !atoms[i].prev.includes(atoms[i - 1].proof)) {
-      broken = i;
-      break;
-    }
-  }
+  // Use new verifyChain with signature support
+  const result = verifyChain(atoms);
 
-  if (broken >= 0) {
-    console.log(`  ✗ CHAIN BROKEN at atom #${broken}`);
+  if (!result.valid) {
+    console.log(`  ✗ CHAIN BROKEN at atom #${result.broken_at}`);
+    console.log(`    Reason: ${result.reason}`);
     console.log(`    This means records have been tampered with.`);
   } else {
     console.log("  ✓ CHAIN VALID — all atoms verified, all links intact.");
   }
+
+  // Signature summary
+  const signed = atoms.filter(a => a.signature).length;
+  const unsigned = atoms.length - signed;
+
+  console.log("");
+  console.log("  Signature status:");
+  console.log(`    Signed:   ${signed} atoms`);
+  console.log(`    Unsigned: ${unsigned} atoms`);
+
+  if (result.signatures && result.signatures.length > 0) {
+    const valid = result.signatures.filter(s => s.valid).length;
+    const invalid = result.signatures.filter(s => !s.valid).length;
+
+    if (invalid > 0) {
+      console.log(`    ⚠️  ${invalid} signature(s) could not be verified`);
+      for (const sig of result.signatures.filter(s => !s.valid)) {
+        console.log(`       #${sig.index}: ${sig.reason}${sig.signer ? ` (${sig.signer})` : ""}`);
+      }
+    } else if (valid > 0) {
+      console.log(`    ✓ All ${valid} signature(s) verified`);
+    }
+  }
+
   console.log("");
 }
 
@@ -497,6 +666,14 @@ const args = process.argv.slice(2);
 const command = args[0] || "help";
 
 switch (command) {
+  case "init":
+    cmdInit(args[1]);
+    break;
+
+  case "identity":
+    cmdIdentity(args.slice(1));
+    break;
+
   case "scan":
     cmdScan();
     break;
@@ -545,14 +722,21 @@ switch (command) {
   case "help":
   default:
     console.log(`
-  FORGE — Trust Chain Protocol v0.1
+  FORGE — Trust Chain Protocol v0.2
 
   Trust = Certainty × Existence
   Every operation produces a verifiable, undeniable fact.
 
-  Commands:
+  Identity (Ed25519 signatures):
+    forge init [name]                Generate signing key pair
+    forge identity                   Show your identity
+    forge identity --export          Export public key for sharing
+    forge identity --import <file>   Import trusted identity
+    forge identity --list            List trusted identities
+
+  Operations:
     forge scan                       Enumerate trust assumptions on this system
-    forge log <action>               Record a TrustAtom (one state transition)
+    forge log <action>               Record a TrustAtom (signed if keys exist)
     forge verify                     Verify chain integrity
     forge seal                       Seal atoms into a Merkle block
     forge anchor                     Submit Merkle root to OTS calendars (Level 3)
